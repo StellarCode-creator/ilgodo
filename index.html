@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>카카오 지도 · 검색 + 지적편집도 + 고도 표시 · 위성/일반 전환</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body {height:100%; margin:0;}
+    #map {width:100%; height:100vh;}
+
+    .control-box{
+      position:absolute; top:14px; left:14px;
+      background:#fff; border:1px solid #d1d5db; border-radius:10px;
+      padding:8px; box-shadow:0 6px 18px rgba(0,0,0,.12);
+      z-index:1000; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+      font:14px system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    }
+    .btn {appearance:none; border:1px solid #cbd5e1; background:#fff; color:#111827;
+      padding:7px 12px; border-radius:8px; cursor:pointer;}
+    .btn.active {background:#2563eb; border-color:#1d4ed8; color:#fff;}
+
+    /* 검색 박스 (상단 중앙) */
+    .search-wrap{
+      position:absolute; top:14px; left:50%; transform:translateX(-50%);
+      z-index:1000; width:min(720px, calc(100% - 28px));
+      display:flex; gap:6px;
+    }
+    #searchInput{
+      flex:1; height:40px; padding:0 12px; font-size:14px;
+      border:1px solid #d1d5db; border-radius:10px; outline:none; background:#fff;
+      box-shadow:0 6px 18px rgba(0,0,0,.06);
+    }
+    #searchBtn{ min-width:80px; }
+
+    .panel {
+      position:absolute; bottom:16px; left:50%; transform:translateX(-50%);
+      background:#fff; border:1px solid #e5e7eb; border-radius:12px;
+      padding:12px 14px; box-shadow:0 8px 24px rgba(0,0,0,.08);
+      z-index:1000; max-width:min(720px, 92vw);
+      font:14px system-ui,-apple-system,Segoe UI,Roboto,Arial; line-height:1.4;
+    }
+    .rows {display:grid; grid-template-columns: 100px 1fr; gap:6px 10px; margin-top:6px;}
+    .mono {font-family:ui-monospace, Menlo, Consolas, monospace;}
+    .muted {color:#6b7280;}
+    .copy-btn{border:1px solid #d1d5db; background:#fff; border-radius:6px; padding:4px 8px; cursor:pointer;}
+    .copy-btn:hover{background:#f3f4f6;}
+  </style>
+</head>
+<body>
+  <!-- 좌측 상단: 지도 타입/지적 토글 -->
+  <div class="control-box">
+    <button id="btnRoadmap" class="btn active" title="일반지도">일반지도</button>
+    <button id="btnSkyview" class="btn" title="위성지도(스카이뷰)">위성지도</button>
+    <button id="toggleCadastral" class="btn" title="지적편집도 토글">지적편집도</button>
+  </div>
+
+  <!-- 상단 중앙: 검색 -->
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="주소나 장소를 검색하세요 (예: 제주시 삼양일동 1516)">
+    <button id="searchBtn" class="btn">검색</button>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- 하단 정보 패널 -->
+  <div class="panel" id="infoPanel">
+    <div><strong id="addrTitle">주소: -</strong></div>
+    <div class="rows">
+      <div class="muted">좌표</div>
+      <div class="mono" id="coords">-</div>
+      <div class="muted">해발고도</div>
+      <div id="elev">-</div>
+    </div>
+    <div style="margin-top:8px;">
+      <button class="copy-btn" id="copyBtn">내용 복사</button>
+      <span class="muted" id="status" style="margin-left:8px;">지도를 클릭하거나, 검색해 보세요.</span>
+    </div>
+  </div>
+
+  <script>
+    let map, geocoder, places, marker, cadastralOn = false;
+
+    function initMap(){
+      map = new kakao.maps.Map(document.getElementById('map'), {
+        center: new kakao.maps.LatLng(33.5035, 126.5757),
+        level: 6,
+        mapTypeId: kakao.maps.MapTypeId.ROADMAP
+      });
+      geocoder = new kakao.maps.services.Geocoder();
+      places   = new kakao.maps.services.Places();
+
+      // 지도 클릭 → 주소/좌표/고도
+      kakao.maps.event.addListener(map, 'click', async (mouseEvent)=>{
+        const latlng = mouseEvent.latLng;
+        const lat = latlng.getLat(), lng = latlng.getLng();
+        placeMarker(lat, lng);
+        // 주소(지번 우선)
+        geocoder.coord2Address(lng, lat, (result, status)=>{
+          const addr = (status === kakao.maps.services.Status.OK && result[0])
+                        ? (result[0].address?.address_name || "-") : "-";
+          updatePanel(addr, lat, lng);
+        });
+        await updateElevation(lat, lng);
+      });
+
+      // 지도 타입 전환
+      document.getElementById('btnRoadmap').addEventListener('click', ()=>{
+        map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
+        setActive('btnRoadmap', 'btnSkyview');
+      });
+      document.getElementById('btnSkyview').addEventListener('click', ()=>{
+        map.setMapTypeId(kakao.maps.MapTypeId.SKYVIEW);
+        setActive('btnSkyview', 'btnRoadmap');
+      });
+
+      // 지적 오버레이
+      document.getElementById('toggleCadastral').addEventListener('click', ()=>{
+        cadastralOn = !cadastralOn;
+        const btn = document.getElementById('toggleCadastral');
+        if (cadastralOn){
+          map.addOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+          btn.classList.add('active');
+        } else {
+          map.removeOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+          btn.classList.remove('active');
+        }
+      });
+
+      // 검색 버튼 & 엔터
+      document.getElementById('searchBtn').addEventListener('click', handleSearch);
+      document.getElementById('searchInput').addEventListener('keypress', (e)=>{
+        if(e.key === 'Enter') handleSearch();
+      });
+
+      // 내용 복사
+      document.getElementById('copyBtn').addEventListener('click', async ()=>{
+        const addr = document.getElementById('addrTitle').textContent.replace(/^주소:\s*/, '');
+        const coords = document.getElementById('coords').textContent;
+        const elev = document.getElementById('elev').textContent.replace(/\s+/g,' ');
+        try{
+          await navigator.clipboard.writeText(`주소: ${addr}\n좌표: ${coords}\n해발고도: ${elev}`);
+          setStatus('복사 완료');
+        }catch{ setStatus('복사 실패'); }
+      });
+    }
+
+    function setActive(onId, offId){
+      document.getElementById(onId).classList.add('active');
+      document.getElementById(offId).classList.remove('active');
+    }
+
+    // 🔎 검색 로직: Places(키워드) → 없으면 Geocoder(주소)로 보완
+    function handleSearch(){
+      const q = document.getElementById('searchInput').value.trim();
+      if(!q){ setStatus('검색어를 입력하세요.'); return; }
+
+      setStatus('검색 중…');
+      places.keywordSearch(q, async (results, status)=>{
+        if(status === kakao.maps.services.Status.OK && results.length){
+          const r = results[0]; // 첫 결과 사용
+          const lat = parseFloat(r.y), lng = parseFloat(r.x);
+          map.setCenter(new kakao.maps.LatLng(lat, lng));
+          map.setLevel(4);
+          placeMarker(lat, lng);
+          // 주소 보강(장소명만 있는 경우)
+          let addr = r.road_address_name || r.address_name || r.place_name || '-';
+          if (!addr) {
+            geocoder.coord2Address(lng, lat, (res, st)=>{
+              if(st===kakao.maps.services.Status.OK && res[0]){
+                addr = res[0].address?.address_name || '-';
+                updatePanel(addr, lat, lng);
+              }
+            });
+          }
+          updatePanel(addr, lat, lng);
+          await updateElevation(lat, lng);
+          setStatus(`"${q}" 검색 완료`);
+        }else{
+          // 키워드검색 실패 → 주소 지오코딩 시도
+          geocoder.addressSearch(q, async (res, st)=>{
+            if(st === kakao.maps.services.Status.OK && res[0]){
+              const lat = parseFloat(res[0].y), lng = parseFloat(res[0].x);
+              const addr = res[0].address?.address_name || res[0].road_address?.address_name || q;
+              map.setCenter(new kakao.maps.LatLng(lat, lng));
+              map.setLevel(4);
+              placeMarker(lat, lng);
+              updatePanel(addr, lat, lng);
+              await updateElevation(lat, lng);
+              setStatus(`"${q}" 주소 검색 완료`);
+            }else{
+              setStatus('검색 결과가 없습니다.');
+            }
+          });
+        }
+      }, { size: 5 }); // 상위 5개까지만 검색(우리는 첫 결과 사용)
+    }
+
+    function placeMarker(lat, lng){
+      const pos = new kakao.maps.LatLng(lat, lng);
+      if (marker) marker.setMap(null);
+      marker = new kakao.maps.Marker({ position: pos, map });
+    }
+
+    function updatePanel(address, lat, lng){
+      document.getElementById('addrTitle').textContent = `주소: ${address}`;
+      document.getElementById('coords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    }
+
+    async function updateElevation(lat, lng){
+      try{
+        setStatus('고도 조회 중…');
+        const resp = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`);
+        const data = await resp.json();
+        const elev = (data.results && data.results[0] && data.results[0].elevation != null)
+                      ? Number(data.results[0].elevation).toFixed(1) : null;
+        document.getElementById('elev').innerHTML = elev ? `<b>${elev} m</b>` : '알 수 없음';
+        setStatus('완료');
+      }catch(e){
+        document.getElementById('elev').textContent = '조회 실패';
+        setStatus('고도 조회 실패');
+      }
+    }
+
+    function setStatus(t){ document.getElementById('status').textContent = t; }
+  </script>
+
+  <!-- Kakao Maps JS SDK (services/places 포함) -->
+  <script type="text/javascript"
+    src="//dapi.kakao.com/v2/maps/sdk.js?appkey=42dc5c20b9646d660d10067eaca438de&libraries=services&autoload=false"
+    onload="kakao.maps.load(initMap)">
+  </script>
+</body>
+</html>
