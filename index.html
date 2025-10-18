@@ -2,67 +2,44 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>카카오 지도 · 검색 + 지적편집도 + 고도 표시 · 위성/일반 전환</title>
+  <title>카카오 지도 · 행정구역 선택(동·읍·면) + 리 + 번지 검색 · 지적편집도 · 고도</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     html, body {height:100%; margin:0;}
     #map {width:100%; height:100vh;}
 
-    /* 좌측 상단 스택 컨테이너 */
+    /* 좌측 상단 스택 */
     .left-stack{
       position:absolute; top:14px; left:14px;
-      width:min(360px, calc(100vw - 28px));
+      width:min(420px, calc(100vw - 28px));
       display:flex; flex-direction:column; gap:10px;
-      z-index:1000;
-      font:14px system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      z-index:1000; font:14px system-ui,-apple-system,Segoe UI,Roboto,Arial;
     }
+    .card{ background:#fff; border:1px solid #d1d5db; border-radius:12px;
+           box-shadow:0 8px 24px rgba(0,0,0,.08); }
+    .control-box{ padding:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .btn{ appearance:none; border:1px solid #cbd5e1; background:#fff; color:#111827;
+          padding:7px 12px; border-radius:8px; cursor:pointer; }
+    .btn.active{ background:#2563eb; border-color:#1d4ed8; color:#fff; }
 
-    /* 공통 카드 */
-    .card{
-      background:#fff; border:1px solid #d1d5db; border-radius:12px;
-      box-shadow:0 8px 24px rgba(0,0,0,.08);
+    .search-wrap{ padding:10px; display:flex; flex-direction:column; gap:8px; }
+    .row{ display:flex; gap:8px; }
+    select, input[type="text"]{
+      height:40px; padding:0 10px; border:1px solid #d1d5db; border-radius:10px;
+      background:#fff; outline:none; flex:1; min-width:0;
     }
+    #searchBtn{ min-width:90px; }
 
-    /* 지도 타입/지적 버튼 박스 */
-    .control-box{
-      padding:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
-    }
-    .btn {
-      appearance:none; border:1px solid #cbd5e1; background:#fff; color:#111827;
-      padding:7px 12px; border-radius:8px; cursor:pointer;
-    }
-    .btn.active {background:#2563eb; border-color:#1d4ed8; color:#fff;}
-
-    /* 검색 박스 (좌측 상단 스택 내부) */
-    .search-wrap{
-      padding:8px; display:flex; gap:6px; align-items:center;
-    }
-    #searchInput{
-      flex:1; height:40px; padding:0 12px; font-size:14px;
-      border:1px solid #d1d5db; border-radius:10px; outline:none; background:#fff;
-      box-shadow:0 6px 18px rgba(0,0,0,.06);
-      min-width:0; /* flex overflow 방지 */
-    }
-    #searchBtn{ min-width:80px; }
-
-    /* 정보 패널 (좌측 상단 스택 내부) */
-    .panel {
-      padding:12px 14px;
-    }
-    .rows {display:grid; grid-template-columns: 100px 1fr; gap:6px 10px; margin-top:6px;}
-    .mono {font-family:ui-monospace, Menlo, Consolas, monospace;}
-    .muted {color:#6b7280;}
-    .copy-btn{border:1px solid #d1d5db; background:#fff; border-radius:6px; padding:4px 8px; cursor:pointer;}
-    .copy-btn:hover{background:#f3f4f6;}
-
-    /* 모바일에서 맵을 덮지 않게 살짝 투명도/블러 옵션(선택) */
-    @media (max-width: 480px){
-      .card{background:rgba(255,255,255,.98); backdrop-filter:saturate(1.2) blur(2px);}
-    }
+    .panel{ padding:12px 14px; }
+    .rows{ display:grid; grid-template-columns: 100px 1fr; gap:6px 10px; margin-top:6px; }
+    .mono{ font-family:ui-monospace, Menlo, Consolas, monospace; }
+    .muted{ color:#6b7280; }
+    .copy-btn{ border:1px solid #d1d5db; background:#fff; border-radius:6px; padding:4px 8px; cursor:pointer; }
+    .copy-btn:hover{ background:#f3f4f6; }
   </style>
 </head>
 <body>
-  <!-- 좌측 상단 스택: (1) 지도 타입/지적 → (2) 검색 → (3) 정보 패널 -->
+  <!-- 좌측 상단: (1) 지도 선택/지적 → (2) 행정구역 선택 검색 → (3) 정보패널 -->
   <div class="left-stack">
     <div class="control-box card">
       <button id="btnRoadmap" class="btn active" title="일반지도">일반지도</button>
@@ -70,22 +47,36 @@
       <button id="toggleCadastral" class="btn" title="지적편집도 토글">지적편집도</button>
     </div>
 
+    <!-- 행정구역 선택 검색 -->
     <div class="search-wrap card">
-      <input id="searchInput" type="text" placeholder="주소나 장소를 검색하세요 (예: 제주시 삼양일동 1516)">
-      <button id="searchBtn" class="btn">검색</button>
+      <div class="row">
+        <select id="selCity" title="시 선택">
+          <option value="제주시" selected>제주시</option>
+          <option value="서귀포시">서귀포시</option>
+        </select>
+        <!-- 동/읍/면 하나의 드롭다운 -->
+        <select id="selEMD" title="동/읍/면 선택"></select>
+      </div>
+
+      <div class="row">
+        <!-- 읍/면일 때만 보이는 리 드롭다운 -->
+        <select id="selRi" title="리 선택(읍·면만)" style="display:none;"></select>
+        <input id="beonji" type="text" placeholder="번지(예: 2114-13)" />
+        <button id="searchBtn" class="btn">검색</button>
+      </div>
+      <div class="muted" id="searchHint">동을 선택하면 바로 번지 입력, 읍/면을 선택하면 리를 고른 뒤 번지를 입력하세요.</div>
     </div>
 
+    <!-- 결과 패널 -->
     <div class="panel card" id="infoPanel">
       <div><strong id="addrTitle">주소: -</strong></div>
       <div class="rows">
-        <div class="muted">좌표</div>
-        <div class="mono" id="coords">-</div>
-        <div class="muted">해발고도</div>
-        <div id="elev">-</div>
+        <div class="muted">좌표</div><div class="mono" id="coords">-</div>
+        <div class="muted">해발고도</div><div id="elev">-</div>
       </div>
       <div style="margin-top:8px;">
         <button class="copy-btn" id="copyBtn">내용 복사</button>
-        <span class="muted" id="status" style="margin-left:8px;">지도를 클릭하거나, 검색해 보세요.</span>
+        <span class="muted" id="status" style="margin-left:8px;">좌측에서 검색해 보세요.</span>
       </div>
     </div>
   </div>
@@ -93,6 +84,45 @@
   <div id="map"></div>
 
   <script>
+    /* ===== 행정구역 데이터 (괄호 숫자 제거) ===== */
+    const ADMIN = {
+      "제주시": {
+        dong: [
+          "건입동","내도동","노형동","도남동","도두이동","도두일동","도련이동","도련일동","도평동",
+          "봉개동","삼도이동","삼도일동","삼양삼동","삼양이동","삼양일동","아라이동","아라일동",
+          "연동","영평동","오등동","오라삼동","오라이동","오라일동","외도이동","외도일동",
+          "용강동","용담삼동","용담이동","용담일동","월평동","이도이동","이도일동","이호이동",
+          "이호일동","일도이동","일도일동","해안동","화북이동","화북일동","회천동","삼양동"
+        ],
+        eup: {
+          "구좌읍":["김녕리","덕천리","동복리","상도리","세화리","송당리","월정리","종달리","평대리","하도리","한동리","행원리"],
+          "애월읍":["고내리","고성리","곽지리","광령리","구엄리","금성리","납읍리","봉성리","상가리","상귀리","소길리","수산리","신엄리","애월리","어음리","유수암리","장전리","하가리","하귀1리","하귀2리"],
+          "조천읍":["교래리","대흘리","북촌리","선흘리","신촌리","신흥리","와산리","와흘리","조천리","함덕리"],
+          "한림읍":["귀덕리","금능리","금악리","대림리","동명리","명월리","상대리","상명리","수원리","옹포리","월령리","월림리","한림리","한수리","협재리"]
+        },
+        myeon: {
+          "우도면":["연평리"],
+          "추자면":["대서리","묵리","신양리","영흥리","예초리"],
+          "한경면":["고산리","금등리","낙천리","두모리","신창리","용수리","저지리","조수리","청수리","판포리"]
+        }
+      },
+      "서귀포시": {
+        dong: [
+          "강정동","대포동","도순동","동홍동","법환동","보목동","상예동","상효동","색달동",
+          "서귀동","서호동","서홍동","신효동","영남동","월평동","중문동","토평동","하예동","하원동","하효동","호근동","회수동"
+        ],
+        eup: {
+          "남원읍":["남원리","수망리","신례리","신흥리","위미리","의귀리","태흥리","하례리","한남리"],
+          "대정읍":["가파리","구억리","동일리","무릉리","보성리","상모리","신도리","신평리","안성리","영락리","인성리","일과리","하모리"],
+          "성산읍":["고성리","난산리","삼달리","성산리","수산리","시흥리","신산리","신천리","신풍리","오조리","온평리"]
+        },
+        myeon: {
+          "안덕면":["감산리","광평리","덕수리","동광리","사계리","상창리","상천리","서광리","창천리","화순리"],
+          "표선면":["가시리","성읍리","세화리","토산리","표선리","하천리"]
+        }
+      }
+    };
+
     let map, geocoder, places, marker, cadastralOn = false;
 
     function initMap(){
@@ -104,7 +134,14 @@
       geocoder = new kakao.maps.services.Geocoder();
       places   = new kakao.maps.services.Places();
 
-      // 지도 클릭 → 주소/좌표/고도
+      // 초기 드롭다운 채우기
+      populateEMD();
+
+      // 이벤트 바인딩
+      document.getElementById('selCity').addEventListener('change', populateEMD);
+      document.getElementById('selEMD').addEventListener('change', onEMDChanged);
+
+      // 지도 클릭 → 정보 표시
       kakao.maps.event.addListener(map, 'click', async (mouseEvent)=>{
         const latlng = mouseEvent.latLng;
         const lat = latlng.getLat(), lng = latlng.getLng();
@@ -140,13 +177,11 @@
         }
       });
 
-      // 검색 버튼 & 엔터
-      document.getElementById('searchBtn').addEventListener('click', handleSearch);
-      document.getElementById('searchInput').addEventListener('keypress', (e)=>{
-        if(e.key === 'Enter') handleSearch();
-      });
+      // 검색
+      document.getElementById('searchBtn').addEventListener('click', searchBySelectors);
+      document.getElementById('beonji').addEventListener('keypress', (e)=>{ if(e.key==='Enter') searchBySelectors(); });
 
-      // 내용 복사
+      // 복사
       document.getElementById('copyBtn').addEventListener('click', async ()=>{
         const addr = document.getElementById('addrTitle').textContent.replace(/^주소:\s*/, '');
         const coords = document.getElementById('coords').textContent;
@@ -163,48 +198,103 @@
       document.getElementById(offId).classList.remove('active');
     }
 
-    // 🔎 검색 로직: Places(키워드) → 없으면 Geocoder(주소)
-    function handleSearch(){
-      const q = document.getElementById('searchInput').value.trim();
-      if(!q){ setStatus('검색어를 입력하세요.'); return; }
+    /* ===== EMD(동/읍/면) 드롭다운 구성 ===== */
+    function populateEMD(){
+      const city = document.getElementById('selCity').value;
+      const selEMD = document.getElementById('selEMD');
+      const selRi  = document.getElementById('selRi');
 
-      setStatus('검색 중…');
-      places.keywordSearch(q, async (results, status)=>{
-        if(status === kakao.maps.services.Status.OK && results.length){
-          const r = results[0];
-          const lat = parseFloat(r.y), lng = parseFloat(r.x);
+      selEMD.innerHTML = '';
+      selRi.innerHTML = '';
+      selRi.style.display = 'none';
+
+      // optgroup: 동 / 읍 / 면
+      const gDong = document.createElement('optgroup'); gDong.label = '동';
+      ADMIN[city].dong.forEach(n=>{ const o = new Option(n, n); gDong.appendChild(o); });
+      selEMD.appendChild(gDong);
+
+      const gEup = document.createElement('optgroup'); gEup.label = '읍';
+      Object.keys(ADMIN[city].eup).forEach(n=>{ const o = new Option(n, n); gEup.appendChild(o); });
+      selEMD.appendChild(gEup);
+
+      const gMyeon = document.createElement('optgroup'); gMyeon.label = '면';
+      Object.keys(ADMIN[city].myeon).forEach(n=>{ const o = new Option(n, n); gMyeon.appendChild(o); });
+      selEMD.appendChild(gMyeon);
+
+      // 기본 첫 항목 선택 후 표시 갱신
+      selEMD.selectedIndex = 0;
+      onEMDChanged();
+    }
+
+    function onEMDChanged(){
+      const city = document.getElementById('selCity').value;
+      const emd  = document.getElementById('selEMD').value;
+      const selRi = document.getElementById('selRi');
+
+      const isEup = Object.prototype.hasOwnProperty.call(ADMIN[city].eup, emd);
+      const isMyeon = Object.prototype.hasOwnProperty.call(ADMIN[city].myeon, emd);
+
+      if (isEup || isMyeon){
+        selRi.style.display = '';
+        selRi.innerHTML = '';
+        const list = isEup ? ADMIN[city].eup[emd] : ADMIN[city].myeon[emd];
+        list.forEach(n=> selRi.appendChild(new Option(n, n)));
+        selRi.selectedIndex = 0;
+      }else{
+        selRi.style.display = 'none';
+        selRi.innerHTML = '';
+      }
+    }
+
+    /* ===== 선택값으로 주소 생성 후 검색 ===== */
+    function searchBySelectors(){
+      const city  = document.getElementById('selCity').value;  // 제주시 / 서귀포시
+      const emd   = document.getElementById('selEMD').value;   // 동 or 읍/면
+      const riSel = document.getElementById('selRi');
+      const ri    = riSel.style.display === 'none' ? '' : riSel.value;
+      const bj    = document.getElementById('beonji').value.trim();
+
+      if(!emd){ setStatus('행정동을 선택하세요.'); return; }
+      if(!bj){ setStatus('번지를 입력하세요.'); return; }
+
+      const isEup = Object.prototype.hasOwnProperty.call(ADMIN[city].eup, emd);
+      const isMyeon = Object.prototype.hasOwnProperty.call(ADMIN[city].myeon, emd);
+
+      let addr = `제주특별자치도 ${city} ${emd}`;
+      if ((isEup || isMyeon)){
+        if(!ri){ setStatus('리를 선택하세요.'); return; }
+        addr += ` ${ri}`;
+      }
+      addr += ` ${bj}`;
+      setStatus(`"${addr}" 검색 중…`);
+
+      // 지오코딩 우선, 실패 시 키워드 보완
+      geocoder.addressSearch(addr, async (res, st)=>{
+        if(st === kakao.maps.services.Status.OK && res[0]){
+          const lat = parseFloat(res[0].y), lng = parseFloat(res[0].x);
           map.setCenter(new kakao.maps.LatLng(lat, lng));
           map.setLevel(4);
           placeMarker(lat, lng);
-          let addr = r.road_address_name || r.address_name || r.place_name || '-';
-          if (!addr) {
-            geocoder.coord2Address(lng, lat, (res, st)=>{
-              if(st===kakao.maps.services.Status.OK && res[0]){
-                addr = res[0].address?.address_name || '-';
-                updatePanel(addr, lat, lng);
-              }
-            });
-          }
           updatePanel(addr, lat, lng);
           await updateElevation(lat, lng);
-          setStatus(`"${q}" 검색 완료`);
+          setStatus('검색 완료');
         }else{
-          geocoder.addressSearch(q, async (res, st)=>{
-            if(st === kakao.maps.services.Status.OK && res[0]){
-              const lat = parseFloat(res[0].y), lng = parseFloat(res[0].x);
-              const addr = res[0].address?.address_name || res[0].road_address?.address_name || q;
+          places.keywordSearch(addr, async (results, status)=>{
+            if(status === kakao.maps.services.Status.OK && results.length){
+              const r = results[0];
+              const lat = parseFloat(r.y), lng = parseFloat(r.x);
               map.setCenter(new kakao.maps.LatLng(lat, lng));
               map.setLevel(4);
               placeMarker(lat, lng);
               updatePanel(addr, lat, lng);
               await updateElevation(lat, lng);
-              setStatus(`"${q}" 주소 검색 완료`);
+              setStatus('검색 완료(보완)');
             }else{
-              setStatus('검색 결과가 없습니다.');
+              setStatus('검색 결과가 없습니다. 입력값을 확인하세요.');
             }
-          });
+          }, { size: 3 });
         }
-      }, { size: 5 });
+      });
     }
 
     function placeMarker(lat, lng){
@@ -212,12 +302,10 @@
       if (marker) marker.setMap(null);
       marker = new kakao.maps.Marker({ position: pos, map });
     }
-
     function updatePanel(address, lat, lng){
       document.getElementById('addrTitle').textContent = `주소: ${address}`;
       document.getElementById('coords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     }
-
     async function updateElevation(lat, lng){
       try{
         setStatus('고도 조회 중…');
@@ -232,11 +320,10 @@
         setStatus('고도 조회 실패');
       }
     }
-
     function setStatus(t){ document.getElementById('status').textContent = t; }
   </script>
 
-  <!-- Kakao Maps JS SDK (services/places 포함) -->
+  <!-- Kakao Maps JS SDK -->
   <script type="text/javascript"
     src="//dapi.kakao.com/v2/maps/sdk.js?appkey=42dc5c20b9646d660d10067eaca438de&libraries=services&autoload=false"
     onload="kakao.maps.load(initMap)">
