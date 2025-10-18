@@ -14,21 +14,24 @@
       width:min(420px, calc(100vw - 28px));
       display:flex; flex-direction:column; gap:10px;
       z-index:1000; font:14px system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      pointer-events: none; /* 내부 카드만 클릭 가능하게 아래에서 복구 */
     }
     .card{ background:#fff; border:1px solid #d1d5db; border-radius:12px;
-           box-shadow:0 8px 24px rgba(0,0,0,.08); }
+           box-shadow:0 8px 24px rgba(0,0,0,.08); pointer-events: auto; }
     .control-box{ padding:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .btn{ appearance:none; border:1px solid #cbd5e1; background:#fff; color:#111827;
-          padding:7px 12px; border-radius:8px; cursor:pointer; }
+          padding:6px 10px; border-radius:8px; cursor:pointer; font-size:13px; height:32px; }
     .btn.active{ background:#2563eb; border-color:#1d4ed8; color:#fff; }
 
     .search-wrap{ padding:10px; display:flex; flex-direction:column; gap:8px; }
     .row{ display:flex; gap:8px; }
+
+    /* ▼ 드롭다운/입력 높이 20% 감소 + 내부 패딩 축소 */
     select, input[type="text"]{
-      height:40px; padding:0 10px; border:1px solid #d1d5db; border-radius:10px;
-      background:#fff; outline:none; flex:1; min-width:0;
+      height:32px; padding:0 6px; border:1px solid #d1d5db; border-radius:8px;
+      background:#fff; outline:none; flex:1; min-width:0; font-size:13px;
     }
-    #searchBtn{ min-width:90px; }
+    #searchBtn{ min-width:80px; }
 
     .panel{ padding:12px 14px; }
     .rows{ display:grid; grid-template-columns: 100px 1fr; gap:6px 10px; margin-top:6px; }
@@ -64,7 +67,6 @@
         <input id="beonji" type="text" placeholder="번지(예: 2114-13)" />
         <button id="searchBtn" class="btn">검색</button>
       </div>
-      <div class="muted" id="searchHint">동을 선택하면 바로 번지 입력, 읍/면을 선택하면 리를 고른 뒤 번지를 입력하세요.</div>
     </div>
 
     <!-- 결과 패널 -->
@@ -109,7 +111,8 @@
       "서귀포시": {
         dong: [
           "강정동","대포동","도순동","동홍동","법환동","보목동","상예동","상효동","색달동",
-          "서귀동","서호동","서홍동","신효동","영남동","월평동","중문동","토평동","하예동","하원동","하효동","호근동","회수동"
+          "서귀동","서호동","서홍동","신효동","영남동","월평동","중문동","토평동",
+          "하예동","하원동","하효동","호근동","회수동"
         ],
         eup: {
           "남원읍":["남원리","수망리","신례리","신흥리","위미리","의귀리","태흥리","하례리","한남리"],
